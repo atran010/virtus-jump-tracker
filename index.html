@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtus Jump Progress Tracker - Live Data</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #dc2626 0%, #7f1d1d 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 30px;
+        }
+
+        h1 {
+            color: #2d3748;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #718096;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .loading-content {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #dc2626;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .database-info {
+            background: #fee2e2;
+            border-left: 4px solid #dc2626;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .database-info h3 {
+            color: #7f1d1d;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .database-info p {
+            color: #991b1b;
+            font-size: 14px;
+            margin: 3px 0;
+        }
+
+        .refresh-btn {
+            background: #dc2626;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .refresh-btn:hover {
+            background: #b91c1c;
+            transform: translateY(-1px);
+        }
+
+        .refresh-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .last-updated {
+            font-size: 12px;
+            color: #991b1b;
+            margin-top: 5px;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f7fafc;
+            border-radius: 12px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        select, input {
+            padding: 10px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: #dc2626;
+        }
+
+        .search-box {
+            margin-bottom: 10px;
+        }
+
+        .search-box input {
+            width: 100%;
+        }
+
+        .athlete-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+        }
+
+        .athlete-count {
+            font-size: 12px;
+            color: #718096;
+            margin-top: 5px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #dc2626 0%, #7f1d1d 100%);
+            padding: 20px;
+            border-radius: 12px;
+            color: white;
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.9;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .stat-change {
+            font-size: 14px;
+            opacity: 0.95;
+        }
+
+        .chart-container {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 450px;
+            padding: 10px 10px 30px 10px;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+            font-size: 16px;
+        }
+
+        .athlete-info {
+            background: #edf2f7;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .athlete-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .data-points {
+            font-size: 14px;
+            color: #718096;
+        }
+
+        .date-range-display {
+            font-size: 14px;
+            color: #4a5568;
+            font-style: italic;
+        }
+
+        .error-message {
+            background: #fee2e2;
+            border: 2px solid #dc2626;
+            color: #7f1d1d;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .error-message h3 {
+            margin-bottom: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .controls {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h2>Loading Data from Google Sheet...</h2>
+            <p style="color: #718096; margin-top: 10px;">Please wait...</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1>🏃‍♂️ Virtus Jump Progress Tracker</h1>
+        <p class="subtitle">Live Data from Google Sheets</p>
+
+        <div id="mainContent">
+            <div class="database-info" id="dbInfo">
+                <div>
+                    <h3>📊 Database Statistics</h3>
+                    <p id="statsText">Loading...</p>
+                    <p class="last-updated" id="lastUpdated"></p>
+                </div>
+                <button class="refresh-btn" id="refreshBtn" onclick="fetchData()">🔄 Refresh Data</button>
+            </div>
+
+            <div class="controls">
+                <div class="control-group">
+                    <label for="athleteSelect">Select Athlete</label>
+                    <div class="search-box">
+                        <input type="text" id="athleteSearch" placeholder="Search athletes...">
+                    </div>
+                    <select id="athleteSelect" class="athlete-list" size="10">
+                        <option value="">-- Choose Athlete --</option>
+                    </select>
+                    <div class="athlete-count" id="athleteCount"></div>
+                </div>
+                <div class="control-group">
+                    <label for="startDate">Start Date</label>
+                    <input type="date" id="startDate">
+                </div>
+                <div class="control-group">
+                    <label for="endDate">End Date</label>
+                    <input type="date" id="endDate">
+                </div>
+            </div>
+
+            <div id="athleteInfo"></div>
+            <div id="statsContainer"></div>
+            <div id="chartsContainer"></div>
+        </div>
+
+        <div id="errorContainer"></div>
+    </div>
+
+    <script>
+        // Google Apps Script URL - connected to Virtus Google Sheet
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzJqxxxDvrXPODwq9mRDmUOYw84Qug6NRveoZ03YouGvH_Xo6OIMvY36SWRkY-ccNs/exec';
+
+        let athleteData = {};
+        let verticalChart, broadChart;
+        let allAthletes = [];
+
+        async function fetchData() {
+            const refreshBtn = document.getElementById('refreshBtn');
+            if (refreshBtn) refreshBtn.disabled = true;
+
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            document.getElementById('errorContainer').innerHTML = '';
+
+            try {
+                const response = await fetch(GOOGLE_SCRIPT_URL);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+
+                athleteData = result.data || result;
+                
+                if (result.success && result.data) {
+                    athleteData = result.data;
+                }
+
+                initializeWidget();
+                
+                document.getElementById('loadingOverlay').style.display = 'none';
+                
+                const now = new Date().toLocaleString();
+                document.getElementById('lastUpdated').textContent = `Last updated: ${now}`;
+
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('loadingOverlay').style.display = 'none';
+                document.getElementById('errorContainer').innerHTML = `
+                    <div class="error-message">
+                        <h3>⚠️ Error Loading Data</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <p>Please contact the administrator if this error persists.</p>
+                        <button class="refresh-btn" style="margin-top: 10px;" onclick="fetchData()">Retry</button>
+                    </div>
+                `;
+            } finally {
+                if (refreshBtn) refreshBtn.disabled = false;
+            }
+        }
+
+        function initializeWidget() {
+            allAthletes = Object.keys(athleteData).sort((a, b) => {
+                return athleteData[b].length - athleteData[a].length;
+            });
+            
+            displayDatabaseInfo();
+            populateAthleteDropdown();
+            
+            const endDate = new Date();
+            const startDate = new Date('2022-01-01');
+            document.getElementById('startDate').valueAsDate = startDate;
+            document.getElementById('endDate').valueAsDate = endDate;
+            
+            document.getElementById('athleteSelect').addEventListener('change', updateDashboard);
+            document.getElementById('startDate').addEventListener('change', updateDashboard);
+            document.getElementById('endDate').addEventListener('change', updateDashboard);
+            document.getElementById('athleteSearch').addEventListener('input', handleSearch);
+        }
+
+        function displayDatabaseInfo() {
+            const totalAthletes = allAthletes.length;
+            const totalTests = getTotalDataPoints();
+            const dateRange = getDateRange();
+            
+            document.getElementById('statsText').innerHTML = `
+                <strong>${totalAthletes}</strong> athletes tracked | 
+                <strong>${totalTests}</strong> total tests | 
+                ${dateRange.start} to ${dateRange.end}
+            `;
+        }
+
+        function getTotalDataPoints() {
+            let total = 0;
+            for (let athlete in athleteData) {
+                total += athleteData[athlete].length;
+            }
+            return total;
+        }
+
+        function getDateRange() {
+            let minDate = null;
+            let maxDate = null;
+            
+            for (let athlete in athleteData) {
+                const data = athleteData[athlete];
+                if (data.length > 0) {
+                    const firstDate = new Date(data[0].date);
+                    const lastDate = new Date(data[data.length - 1].date);
+                    
+                    if (!minDate || firstDate < minDate) minDate = firstDate;
+                    if (!maxDate || lastDate > maxDate) maxDate = lastDate;
+                }
+            }
+            
+            return {
+                start: minDate ? minDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'N/A',
+                end: maxDate ? maxDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'N/A'
+            };
+        }
+
+        function populateAthleteDropdown(filtered = null) {
+            const athletes = filtered || allAthletes;
+            const select = document.getElementById('athleteSelect');
+            select.innerHTML = '<option value="">-- Choose Athlete --</option>';
+            
+            athletes.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                const testCount = athleteData[name].length;
+                option.textContent = `${name} (${testCount} tests)`;
+                select.appendChild(option);
+            });
+
+            updateAthleteCount(athletes.length);
+        }
+
+        function updateAthleteCount(count) {
+            const total = allAthletes.length;
+            document.getElementById('athleteCount').textContent = 
+                `Showing ${count} of ${total} athlete${total !== 1 ? 's' : ''}`;
+        }
+
+        function handleSearch(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            
+            if (!searchTerm) {
+                populateAthleteDropdown();
+                return;
+            }
+            
+            const filtered = allAthletes.filter(name => 
+                name.toLowerCase().includes(searchTerm)
+            );
+
+            populateAthleteDropdown(filtered);
+        }
+
+        function filterDataByDateRange(data, start, end) {
+            return data.filter(entry => {
+                const entryDate = new Date(entry.date);
+                return entryDate >= start && entryDate <= end;
+            });
+        }
+
+        function calculateStats(data) {
+            if (data.length === 0) return null;
+
+            const verticalNonZero = data.filter(d => d.verticalJump > 0).map(d => d.verticalJump);
+            const broadNonZero = data.filter(d => d.broadJump > 0).map(d => d.broadJump);
+            
+            const verticalFirst = verticalNonZero.length > 0 ? verticalNonZero[0] : 0;
+            const verticalMax = verticalNonZero.length > 0 ? Math.max(...verticalNonZero) : 0;
+            
+            const broadFirst = broadNonZero.length > 0 ? broadNonZero[0] : 0;
+            const broadMax = broadNonZero.length > 0 ? Math.max(...broadNonZero) : 0;
+
+            const verticalChange = verticalMax - verticalFirst;
+            const verticalPercent = verticalFirst > 0 ? ((verticalChange / verticalFirst) * 100).toFixed(1) : 0;
+            
+            const broadChange = broadMax - broadFirst;
+            const broadPercent = broadFirst > 0 ? ((broadChange / broadFirst) * 100).toFixed(1) : 0;
+
+            return {
+                vertical: {
+                    current: verticalMax,
+                    change: verticalChange,
+                    percent: verticalPercent
+                },
+                broad: {
+                    current: broadMax,
+                    change: broadChange,
+                    percent: broadPercent
+                },
+                dataPoints: data.length,
+                firstDate: data[0].date,
+                lastDate: data[data.length - 1].date
+            };
+        }
+
+        function renderAthleteInfo(name, stats) {
+            const container = document.getElementById('athleteInfo');
+            if (!name || !stats) {
+                container.innerHTML = '';
+                return;
+            }
+
+            const firstDate = new Date(stats.firstDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            const lastDate = new Date(stats.lastDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            
+            container.innerHTML = `
+                <div class="athlete-info">
+                    <div class="athlete-name">${name}</div>
+                    <div class="data-points">${stats.dataPoints} test${stats.dataPoints !== 1 ? 's' : ''} in range</div>
+                    <div class="date-range-display">${firstDate} → ${lastDate}</div>
+                </div>
+            `;
+        }
+
+        function renderStats(stats) {
+            const container = document.getElementById('statsContainer');
+            
+            if (!stats) {
+                container.innerHTML = '<div class="no-data">Select an athlete and date range to view progress</div>';
+                return;
+            }
+
+            const verticalSymbol = stats.vertical.change >= 0 ? '↑' : '↓';
+            const broadSymbol = stats.broad.change >= 0 ? '↑' : '↓';
+
+            container.innerHTML = `
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Vertical Jump (Best)</div>
+                        <div class="stat-value">${stats.vertical.current.toFixed(1)}"</div>
+                        <div class="stat-change">
+                            ${verticalSymbol} ${Math.abs(stats.vertical.change).toFixed(1)}" from first (${stats.vertical.percent >= 0 ? '+' : ''}${stats.vertical.percent}%)
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Broad Jump (Best)</div>
+                        <div class="stat-value">${stats.broad.current.toFixed(1)}"</div>
+                        <div class="stat-change">
+                            ${broadSymbol} ${Math.abs(stats.broad.change).toFixed(1)}" from first (${stats.broad.percent >= 0 ? '+' : ''}${stats.broad.percent}%)
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderCharts(data) {
+            const container = document.getElementById('chartsContainer');
+            
+            if (data.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            const verticalFiltered = [];
+            const verticalDates = [];
+            const broadFiltered = [];
+            const broadDates = [];
+
+            data.forEach(entry => {
+                if (entry.verticalJump > 0) {
+                    verticalFiltered.push(entry.verticalJump);
+                    verticalDates.push(new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }));
+                }
+                
+                if (entry.broadJump > 0) {
+                    broadFiltered.push(entry.broadJump);
+                    broadDates.push(new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }));
+                }
+            });
+
+            container.innerHTML = `
+                <div class="chart-container">
+                    <h3 style="margin-bottom: 15px; color: #2d3748;">Vertical Jump Progress</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="verticalChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <h3 style="margin-bottom: 15px; color: #2d3748;">Broad Jump Progress</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="broadChart"></canvas>
+                    </div>
+                </div>
+            `;
+
+            if (verticalFiltered.length > 0) {
+                const verticalFirst = verticalFiltered[0];
+                const verticalMax = Math.max(...verticalFiltered);
+                const verticalFirstIndex = 0;
+                const verticalMaxIndex = verticalFiltered.indexOf(verticalMax);
+
+                if (verticalChart) verticalChart.destroy();
+                verticalChart = new Chart(document.getElementById('verticalChart'), {
+                    type: 'line',
+                    data: {
+                        labels: verticalDates,
+                        datasets: [{
+                            label: 'Vertical Jump',
+                            data: verticalFiltered,
+                            borderColor: '#dc2626',
+                            backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: 3,
+                            pointHoverRadius: 5,
+                            pointBackgroundColor: '#dc2626',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        layout: {
+                            padding: {
+                                top: 30,
+                                bottom: 10
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.parsed.y.toFixed(1) + ' inches';
+                                    }
+                                }
+                            },
+                            datalabels: {
+                                display: function(context) {
+                                    return context.dataIndex === verticalFirstIndex || context.dataIndex === verticalMaxIndex;
+                                },
+                                align: function(context) {
+                                    return context.dataIndex === verticalMaxIndex ? 'top' : 'bottom';
+                                },
+                                offset: 10,
+                                backgroundColor: function(context) {
+                                    return context.dataIndex === verticalMaxIndex ? '#16a34a' : '#dc2626';
+                                },
+                                borderColor: 'white',
+                                borderWidth: 2,
+                                borderRadius: 4,
+                                color: 'white',
+                                font: {
+                                    weight: 'bold',
+                                    size: 12
+                                },
+                                padding: 6,
+                                formatter: function(value) {
+                                    return value.toFixed(1) + '"';
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                grid: {
+                                    color: '#e2e8f0'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return value + '"';
+                                    }
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                },
+                                ticks: {
+                                    maxRotation: 45,
+                                    minRotation: 45,
+                                    maxTicksLimit: 20
+                                }
+                            }
+                        }
+                    },
+                    plugins: [ChartDataLabels]
+                });
+            }
+
+            if (broadFiltered.length > 0) {
+                const broadFirst = broadFiltered[0];
+                const broadMax = Math.max(...broadFiltered);
+                const broadFirstIndex = 0;
+                const broadMaxIndex = broadFiltered.indexOf(broadMax);
+
+                if (broadChart) broadChart.destroy();
+                broadChart = new Chart(document.getElementById('broadChart'), {
+                    type: 'line',
+                    data: {
+                        labels: broadDates,
+                        datasets: [{
+                            label: 'Broad Jump',
+                            data: broadFiltered,
+                            borderColor: '#dc2626',
+                            backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: 3,
+                            pointHoverRadius: 5,
+                            pointBackgroundColor: '#dc2626',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        layout: {
+                            padding: {
+                                top: 30,
+                                bottom: 10
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.parsed.y.toFixed(1) + ' inches';
+                                    }
+                                }
+                            },
+                            datalabels: {
+                                display: function(context) {
+                                    return context.dataIndex === broadFirstIndex || context.dataIndex === broadMaxIndex;
+                                },
+                                align: function(context) {
+                                    return context.dataIndex === broadMaxIndex ? 'top' : 'bottom';
+                                },
+                                offset: 10,
+                                backgroundColor: function(context) {
+                                    return context.dataIndex === broadMaxIndex ? '#16a34a' : '#dc2626';
+                                },
+                                borderColor: 'white',
+                                borderWidth: 2,
+                                borderRadius: 4,
+                                color: 'white',
+                                font: {
+                                    weight: 'bold',
+                                    size: 12
+                                },
+                                padding: 6,
+                                formatter: function(value) {
+                                    return value.toFixed(1) + '"';
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                grid: {
+                                    color: '#e2e8f0'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return value + '"';
+                                    }
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                },
+                                ticks: {
+                                    maxRotation: 45,
+                                    minRotation: 45,
+                                    maxTicksLimit: 20
+                                }
+                            }
+                        }
+                    },
+                    plugins: [ChartDataLabels]
+                });
+            }
+        }
+
+        function updateDashboard() {
+            const athlete = document.getElementById('athleteSelect').value;
+            const start = new Date(document.getElementById('startDate').value);
+            const end = new Date(document.getElementById('endDate').value);
+
+            if (!athlete) {
+                renderAthleteInfo('', null);
+                renderStats(null);
+                document.getElementById('chartsContainer').innerHTML = '';
+                return;
+            }
+
+            const data = athleteData[athlete] || [];
+            const filteredData = filterDataByDateRange(data, start, end);
+            const stats = calculateStats(filteredData);
+
+            renderAthleteInfo(athlete, stats);
+            renderStats(stats);
+            renderCharts(filteredData);
+        }
+
+        window.addEventListener('DOMContentLoaded', fetchData);
+    </script>
+</body>
+</html>
